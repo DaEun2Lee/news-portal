@@ -1,154 +1,219 @@
-📰 Laravel News Portal (Docker Deployment Version)
+# News Portal (Docker Deployment)
 
-Original Source: https://github.com/sahrulromadi/laravel-news-portal
+## 📌 Original Source
 
-This repository packages the original project for Docker-based deployment with DB backup support.
+Original project repository:
 
-📦 Project Structure
+https://github.com/sahrulromadi/laravel-news-portal
+
+---
+
+## 🐳 Docker-Based Deployment Guide
+
+This guide explains how to deploy the Laravel News Portal project using Docker while keeping the current structure (including `php artisan serve`).
+
+---
+
+# 📂 Project Structure
+
+```
 news-portal-backup/
 ├── docker-compose.yml
+├── Dockerfile
 ├── .env
-├── Caddyfile
+├── db-backup/
+│   └── news_portal_backup.sql
+├── storage/
+└── source/   (cloned laravel project)
+```
+
+---
+
+# 1️⃣ Clone Original Source
+
+```bash
+git clone https://github.com/sahrulromadi/laravel-news-portal.git source
+cd source
+```
+
+---
+
+# 2️⃣ Create Dockerfile
+
+Create a file named `Dockerfile` in the root directory:
+
+```Dockerfile
+FROM php:8.1-cli
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git curl unzip libpng-dev libonig-dev libxml2-dev zip
+
+# Install PHP extensions
+RUN docker-php-ext-install pdo pdo_mysql mbstring exif pcntl bcmath gd
+
+# Install Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+WORKDIR /var/www
+
+COPY source/ /var/www
+
+RUN composer install
+
+EXPOSE 8000
+
+CMD php artisan serve --host=0.0.0.0 --port=8000
+```
+
+---
+
+# 3️⃣ Create docker-compose.yml
+
+```yaml
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: news_portal_app
+    ports:
+      - "8224:8000"
+    volumes:
+      - ./source:/var/www
+      - ./storage:/var/www/storage
+    depends_on:
+      - db
+    networks:
+      - newsnet
+
+  db:
+    image: mysql:8.0
+    container_name: news_portal_db
+    restart: always
+    environment:
+      MYSQL_DATABASE: news_portal
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: laravel
+      MYSQL_PASSWORD: laravel
+    ports:
+      - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./db-backup:/docker-entrypoint-initdb.d
+    networks:
+      - newsnet
+
+volumes:
+  db_data:
+
+networks:
+  newsnet:
+```
+
+---
+
+# 4️⃣ Configure .env
+
+Update `.env` file inside `source/`:
+
+```env
+DB_CONNECTION=mysql
+DB_HOST=db
+DB_PORT=3306
+DB_DATABASE=news_portal
+DB_USERNAME=laravel
+DB_PASSWORD=laravel
+```
+
+---
+
+# 5️⃣ Prepare Storage Directory
+
+Create storage folder:
+
+```bash
+mkdir -p storage
+```
+
+Set permission (Linux):
+
+```bash
+chmod -R 777 storage
+```
+
+Then inside container:
+
+```bash
+docker compose exec app php artisan storage:link
+```
+
+---
+
+# 6️⃣ Database Import (Optional if backup exists)
+
+Place your SQL backup file in:
+
+```
+db-backup/news_portal_backup.sql
+```
+
+MySQL container will automatically import it during first startup.
+
+---
+
+# 7️⃣ Run the Application
+
+```bash
+docker compose up -d --build
+```
+
+Access via browser:
+
+```
+http://localhost:8224
+```
+
+If deployed on server:
+
+```
+http://SERVER_IP:8224
+```
+
+---
+
+# 📦 Backup Structure Example
+
+```
+news-portal-backup/
+├── docker-compose.yml
+├── Dockerfile
+├── .env
 ├── db-backup/
 │   └── news_portal_backup.sql
 └── storage/
-🐳 Requirements
+```
 
-Docker
+---
 
-Docker Compose
+# ⚠ Notes
 
-Linux / WSL / macOS
+- This deployment keeps `php artisan serve`.
+- This is suitable for development or internal deployment.
+- For production environments, consider using Nginx + PHP-FPM instead of `artisan serve`.
 
-Available Ports:
+---
 
-HTTP → 8224
+# ✅ Quick Start Summary
 
-HTTPS → 8444
+```bash
+docker compose up -d --build
+```
 
-MySQL → 3307
+Open browser → `http://localhost:8224`
 
-🚀 Installation & Run
-1️⃣ Clone Project
-git clone <your-repository-url>
-cd news-portal-backup
-2️⃣ Start Containers
-sudo docker compose up -d --build
+---
 
-Check status:
+# 🎉 Done
 
-sudo docker ps
-3️⃣ Restore Database Backup
-
-Import the included SQL backup file:
-
-sudo docker exec -i laravel_news_db \
-  mysql -u root -proot news_portal < db-backup/news_portal_backup.sql
-
-Verify:
-
-sudo docker exec -it laravel_news_db mysql -u root -proot
-SHOW DATABASES;
-USE news_portal;
-SHOW TABLES;
-4️⃣ Laravel Initialization
-
-Enter Laravel container:
-
-sudo docker exec -it news_center_app bash
-
-Clear caches:
-
-php artisan config:clear
-php artisan cache:clear
-php artisan route:clear
-php artisan view:clear
-
-If sessions/cache tables are required:
-
-php artisan session:table
-php artisan cache:table
-php artisan migrate
-🌐 Access
-HTTP
-http://SERVER_IP:8224
-
-Example:
-
-http://10.20.16.66:8224
-HTTPS (Self-Signed)
-https://news-portal.local:8444
-
-Browser may show a security warning due to self-signed certificate.
-
-⚙️ Important .env Settings
-APP_ENV=local
-APP_DEBUG=true
-APP_URL=http://10.20.16.66:8224
-
-DB_CONNECTION=mysql
-DB_HOST=laravel_news_db
-DB_PORT=3306
-DB_DATABASE=news_portal
-DB_USERNAME=newsuser
-DB_PASSWORD=newspass
-
-SESSION_DRIVER=file
-CACHE_STORE=file
-QUEUE_CONNECTION=sync
-🧱 Architecture
-Client
-   ↓
-Caddy (Reverse Proxy + HTTPS + HTTP/3)
-   ↓
-Laravel (artisan serve)
-   ↓
-MySQL (Docker Volume)
-
-Caddy → Reverse proxy, HTTPS, HTTP/3
-
-Laravel → php artisan serve
-
-MySQL → Persistent Docker volume storage
-
-💾 Docker Volume
-
-Check volumes:
-
-sudo docker volume ls
-
-MySQL data volume:
-
-laravel-news-portal_laravel_news_db_data
-🛑 Stop Containers
-sudo docker compose down
-
-Remove volumes:
-
-sudo docker compose down -v
-📌 Notes
-
-Set APP_DEBUG=false in production.
-
-Use a real TLS certificate for production.
-
-artisan serve is development-oriented (not recommended for high traffic).
-
-For production: consider nginx + php-fpm architecture.
-
-🎯 Purpose of This Setup
-
-Docker-based reproducible environment
-
-WAN optimization experiments
-
-HTTP/3 (QUIC) testing
-
-Reverse proxy testing
-
-📄 License
-
-This project follows the original repository’s license.
-See original source for details:
-
-https://github.com/sahrulromadi/laravel-news-portal
+Your Laravel News Portal is now running inside Docker.
