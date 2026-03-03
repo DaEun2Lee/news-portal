@@ -1,0 +1,14 @@
+{
+    debug
+}
+
+https://news-portal.local {
+
+    tls internal
+
+    reverse_proxy news-center-app:8000
+}
+
+http://news-portal.local {
+    redir https://news-portal.local{uri}
+}
